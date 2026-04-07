@@ -1,1 +1,65 @@
 // app global css
+@use 'sass:color';
+
+// Popup dimensions for browser extension
+body {
+  width: 400px;
+  min-height: 500px;
+  max-height: 600px;
+}
+
+// Tier color utility classes
+.tier-excellent {
+  background-color: $tier-excellent;
+  color: white;
+}
+
+.tier-good {
+  background-color: $tier-good;
+  color: $dark;
+}
+
+.tier-poor {
+  background-color: $tier-poor;
+  color: white;
+}
+
+.tier-avoid {
+  background-color: $tier-avoid;
+  color: white;
+}
+
+// Text variants
+.text-tier-excellent {
+  color: $tier-excellent;
+}
+
+.text-tier-good {
+  color: color.adjust($tier-good, $lightness: -15%);
+}
+
+.text-tier-poor {
+  color: $tier-poor;
+}
+
+.text-tier-avoid {
+  color: $tier-avoid;
+}
+
+// Common popup styles
+.page-container {
+  padding: 12px;
+}
+
+.section-header {
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: $dark;
+  margin-bottom: 8px;
+}
+
+.empty-message {
+  text-align: center;
+  padding: 24px 16px;
+  color: rgba(0, 0, 0, 0.54);
+}
