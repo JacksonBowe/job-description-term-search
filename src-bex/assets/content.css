@@ -255,3 +255,22 @@
 .jp-overlay__list--warning li {
   color: #9a3412 !important;
 }
+
+/* =============================================================================
+   Scroll-to-Term Highlight
+   ============================================================================= */
+
+.jp-highlight {
+  background-color: #fef08a !important;
+  outline: 2px solid #eab308 !important;
+  outline-offset: 2px !important;
+  border-radius: 2px !important;
+  transition:
+    background-color 0.5s ease,
+    outline 0.5s ease !important;
+}
+
+.jp-highlight--fade {
+  background-color: transparent !important;
+  outline-color: transparent !important;
+}

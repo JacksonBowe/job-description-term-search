@@ -9,7 +9,7 @@
  */
 import { createBridge } from '#q-app/bex/content';
 import { parseCurrentJob, isJobPage, hasJobContent } from './parsers';
-import type { ParseJobResponse, ParseAttempt } from 'src/types';
+import type { ParseJobResponse, ParseAttempt, ScrollToTermResponse } from 'src/types';
 
 // =============================================================================
 // Bridge Setup
@@ -32,6 +32,148 @@ declare module '@quasar/app-vite' {
 
 /** Default timeout for waiting for job content to load (ms) */
 const CONTENT_LOAD_TIMEOUT = 5000;
+
+/** Duration to show highlight before fading (ms) */
+const HIGHLIGHT_DURATION = 2000;
+
+/** Selectors for job description containers */
+const DESCRIPTION_SELECTORS = [
+	'[data-testid="expandable-text-box"]',
+	'.jobs-description__content',
+	'.jobs-box__html-content',
+	'.jobs-description-content__text',
+	'#job-details',
+];
+
+/** Track the currently highlighted element for cleanup */
+let currentHighlight: HTMLElement | null = null;
+
+/**
+ * Find the DOM element containing the matched term
+ * Uses TreeWalker to search text nodes in the job description
+ */
+function findTermElement(matchedOn: string): HTMLElement | null {
+	const searchTerm = matchedOn.toLowerCase();
+
+	for (const selector of DESCRIPTION_SELECTORS) {
+		const container = document.querySelector<HTMLElement>(selector);
+		if (!container) continue;
+
+		// Use TreeWalker to find text nodes containing the term
+		const walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT, null);
+
+		let node: Node | null;
+		while ((node = walker.nextNode())) {
+			const text = node.textContent?.toLowerCase() ?? '';
+			if (text.includes(searchTerm)) {
+				// Return the parent element of the text node
+				const parent = node.parentElement;
+				if (parent) {
+					console.log('[Job Parser] Found term in element:', parent.tagName);
+					return parent;
+				}
+			}
+		}
+	}
+
+	console.log('[Job Parser] Term not found in DOM:', matchedOn);
+	return null;
+}
+
+/**
+ * Clear any existing highlight
+ */
+function clearHighlight(): void {
+	if (currentHighlight) {
+		currentHighlight.classList.remove('jp-highlight', 'jp-highlight--fade');
+		currentHighlight = null;
+	}
+}
+
+/**
+ * Expand the job description if it's collapsed
+ * Clicks the "Show more" button if found
+ * @returns true if expanded, false if already expanded or no button found
+ */
+async function expandJobDescription(): Promise<boolean> {
+	// Find the expand button by its stable data-testid
+	const button = document.querySelector<HTMLButtonElement>(
+		'button[data-testid="expandable-text-button"]',
+	);
+
+	if (!button) {
+		console.log('[Job Parser] No expand button found');
+		return false;
+	}
+
+	// Check if it's a "more" button (not "less")
+	const text = button.textContent?.toLowerCase() ?? '';
+	if (!text.includes('more')) {
+		console.log('[Job Parser] Description already expanded');
+		return false; // Already expanded (shows "less")
+	}
+
+	console.log('[Job Parser] Expanding job description...');
+
+	// The button has pointer-events: none, but inner span has pointer-events: auto
+	// Find the clickable span inside
+	const clickableSpan = button.querySelector<HTMLSpanElement>('span[style*="pointer-events"]');
+	const targetElement = clickableSpan ?? button;
+
+	targetElement.click();
+
+	// Wait for expansion animation
+	await new Promise((resolve) => setTimeout(resolve, 300));
+
+	console.log('[Job Parser] Job description expanded');
+	return true;
+}
+
+/**
+ * Scroll to and highlight the element containing the matched term
+ */
+async function scrollToTerm(matchedOn: string): Promise<ScrollToTermResponse> {
+	// Clear any existing highlight
+	clearHighlight();
+
+	// Expand description if collapsed
+	await expandJobDescription();
+
+	// Find the element containing the term
+	const element = findTermElement(matchedOn);
+	if (!element) {
+		return {
+			success: false,
+			error: 'Term not found on page. Try expanding the job description.',
+		};
+	}
+
+	// Scroll the element into view
+	element.scrollIntoView({
+		behavior: 'smooth',
+		block: 'center',
+	});
+
+	// Add highlight class
+	element.classList.add('jp-highlight');
+	currentHighlight = element;
+
+	// Fade out highlight after duration
+	setTimeout(() => {
+		if (currentHighlight === element) {
+			element.classList.add('jp-highlight--fade');
+			// Remove classes after fade animation
+			setTimeout(() => {
+				if (currentHighlight === element) {
+					clearHighlight();
+				}
+			}, 500);
+		}
+	}, HIGHLIGHT_DURATION);
+
+	console.log('[Job Parser] Scrolled to term:', matchedOn);
+	return { success: true };
+}
 
 /**
  * Wait for job content to load on the page
@@ -93,9 +235,9 @@ bridge.on('job.parse', () => {
  */
 chrome.runtime.onMessage.addListener(
 	(
-		message: { type: string },
+		message: { type: string; matchedOn?: string },
 		_sender: chrome.runtime.MessageSender,
-		sendResponse: (response: ParseJobResponse['data']) => void,
+		sendResponse: (response: ParseJobResponse['data'] | ScrollToTermResponse) => void,
 	) => {
 		if (message.type === 'PARSE_JOB') {
 			console.log('[Job Parser] Parse requested via runtime message');
@@ -128,6 +270,25 @@ chrome.runtime.onMessage.addListener(
 						error: result.error,
 					});
 				}
+			});
+
+			return true; // Keep channel open for async response
+		}
+
+		if (message.type === 'SCROLL_TO_TERM') {
+			console.log('[Job Parser] Scroll to term requested:', message.matchedOn);
+
+			if (!message.matchedOn) {
+				sendResponse({
+					success: false,
+					error: 'No term specified',
+				});
+				return true;
+			}
+
+			// Handle async scrollToTerm
+			void scrollToTerm(message.matchedOn).then((result) => {
+				sendResponse(result);
 			});
 
 			return true; // Keep channel open for async response

@@ -116,7 +116,17 @@ export interface ParseJobResponse {
 	};
 }
 
-export type ContentScriptMessage = ParseJobMessage;
+export interface ScrollToTermMessage {
+	type: 'SCROLL_TO_TERM';
+	matchedOn: string;
+}
+
+export interface ScrollToTermResponse {
+	success: boolean;
+	error?: string;
+}
+
+export type ContentScriptMessage = ParseJobMessage | ScrollToTermMessage;
 export type ContentScriptResponse = ParseJobResponse;
 
 // =============================================================================

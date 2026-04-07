@@ -110,7 +110,12 @@
 				class="q-mb-sm rounded-borders"
 			>
 				<q-list dense separator>
-					<q-item v-for="match in foundDontWantTerms" :key="match.term.id">
+					<q-item
+						v-for="match in foundDontWantTerms"
+						:key="match.term.id"
+						clickable
+						@click="scrollToMatch(match)"
+					>
 						<q-item-section>
 							<q-item-label>
 								{{ match.term.term }}
@@ -156,7 +161,12 @@
 				class="q-mb-sm"
 			>
 				<q-list dense separator>
-					<q-item v-for="match in foundWantTerms" :key="match.term.id">
+					<q-item
+						v-for="match in foundWantTerms"
+						:key="match.term.id"
+						clickable
+						@click="scrollToMatch(match)"
+					>
 						<q-item-section>
 							<q-item-label>
 								{{ match.term.term }}
@@ -202,7 +212,12 @@
 				class="q-mb-sm"
 			>
 				<q-list dense separator>
-					<q-item v-for="match in foundNiceToHaveTerms" :key="match.term.id">
+					<q-item
+						v-for="match in foundNiceToHaveTerms"
+						:key="match.term.id"
+						clickable
+						@click="scrollToMatch(match)"
+					>
 						<q-item-section>
 							<q-item-label>
 								{{ match.term.term }}
@@ -284,7 +299,7 @@
 
 <script setup lang="ts">
 import { computed } from 'vue';
-import type { ParseResult } from 'src/types';
+import type { ParseResult, MatchedTerm, ScrollToTermResponse } from 'src/types';
 
 const props = defineProps<{
 	parseResult: ParseResult | null;
@@ -294,6 +309,38 @@ const props = defineProps<{
 defineEmits<{
 	parse: [];
 }>();
+
+// =============================================================================
+// Scroll to Term
+// =============================================================================
+
+/**
+ * Scroll to and highlight the matched term on the LinkedIn page
+ */
+async function scrollToMatch(match: MatchedTerm): Promise<void> {
+	try {
+		const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+		if (!tab?.id) {
+			console.error('[Job Parser] No active tab found');
+			return;
+		}
+
+		const response: ScrollToTermResponse = await chrome.tabs.sendMessage(tab.id, {
+			type: 'SCROLL_TO_TERM',
+			matchedOn: match.matchedOn,
+		});
+
+		if (!response.success) {
+			console.warn('[Job Parser] Scroll failed:', response.error);
+		}
+	} catch (error) {
+		console.error('[Job Parser] Failed to scroll to term:', error);
+	}
+}
+
+// =============================================================================
+// Computed Helpers
+// =============================================================================
 
 // Computed helpers to categorize terms
 const foundWantTerms = computed(
