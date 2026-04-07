@@ -62,6 +62,7 @@ export interface ParsedJob {
 export interface MatchedTerm {
 	term: Term;
 	matchedOn: string; // The actual string that matched (term or one of its aliases)
+	context?: string; // The sentence/snippet containing the match
 }
 
 /**

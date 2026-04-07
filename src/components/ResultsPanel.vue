@@ -122,6 +122,14 @@
 								>
 									High
 								</q-badge>
+								<q-tooltip
+									v-if="match.context"
+									class="bg-grey-9 text-body2"
+									:offset="[0, 8]"
+									max-width="300px"
+								>
+									"{{ match.context }}"
+								</q-tooltip>
 							</q-item-label>
 							<q-item-label
 								v-if="match.matchedOn !== match.term.term"
@@ -160,6 +168,14 @@
 								>
 									High
 								</q-badge>
+								<q-tooltip
+									v-if="match.context"
+									class="bg-grey-9 text-body2"
+									:offset="[0, 8]"
+									max-width="300px"
+								>
+									"{{ match.context }}"
+								</q-tooltip>
 							</q-item-label>
 							<q-item-label
 								v-if="match.matchedOn !== match.term.term"
@@ -198,6 +214,14 @@
 								>
 									High
 								</q-badge>
+								<q-tooltip
+									v-if="match.context"
+									class="bg-grey-9 text-body2"
+									:offset="[0, 8]"
+									max-width="300px"
+								>
+									"{{ match.context }}"
+								</q-tooltip>
 							</q-item-label>
 							<q-item-label
 								v-if="match.matchedOn !== match.term.term"

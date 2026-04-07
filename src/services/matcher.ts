@@ -47,14 +47,15 @@ export function matchTerms(job: ParsedJob | null, terms: Term[]): ParseResult {
 		};
 	}
 
-	const text = normalizeText(`${job.title} ${job.description}`);
+	const originalText = `${job.title} ${job.description}`;
+	const text = normalizeText(originalText);
 	const foundTerms: MatchedTerm[] = [];
 	const missingTerms: Term[] = [];
 
 	for (const term of terms) {
-		const matchedOn = findMatch(text, term);
-		if (matchedOn) {
-			foundTerms.push({ term, matchedOn });
+		const match = findMatch(text, originalText, term);
+		if (match) {
+			foundTerms.push({ term, matchedOn: match.matchedOn, context: match.context });
 		} else {
 			missingTerms.push(term);
 		}
@@ -121,6 +122,17 @@ function calculateScore(foundTerms: MatchedTerm[], missingTerms: Term[]): number
 // Helper functions
 // =============================================================================
 
+/** Maximum length for context snippet */
+const MAX_CONTEXT_LENGTH = 150;
+
+/**
+ * Result from finding a match
+ */
+interface MatchResult {
+	matchedOn: string;
+	context: string;
+}
+
 /**
  * Normalize text for matching (lowercase)
  */
@@ -144,10 +156,63 @@ function isWordChar(char: string | undefined): boolean {
 }
 
 /**
- * Find which term or alias matches in the text
- * Returns the matched string, or null if no match
+ * Extract a sentence or snippet around a match position
+ * Looks for sentence boundaries (. ! ?) or falls back to character limits
  */
-function findMatch(text: string, term: Term): string | null {
+function extractContext(text: string, matchStart: number, matchEnd: number): string {
+	// Sentence boundary pattern
+	const sentenceEnd = /[.!?]/;
+
+	// Find start of sentence (look backwards for sentence boundary)
+	let contextStart = matchStart;
+	for (let i = matchStart - 1; i >= 0 && matchStart - i < MAX_CONTEXT_LENGTH; i--) {
+		if (sentenceEnd.test(text[i]!)) {
+			contextStart = i + 1;
+			break;
+		}
+		contextStart = i;
+	}
+
+	// Find end of sentence (look forwards for sentence boundary)
+	let contextEnd = matchEnd;
+	for (let i = matchEnd; i < text.length && i - matchEnd < MAX_CONTEXT_LENGTH; i++) {
+		contextEnd = i + 1;
+		if (sentenceEnd.test(text[i]!)) {
+			break;
+		}
+	}
+
+	// Extract and clean up the context
+	let context = text.slice(contextStart, contextEnd).trim();
+
+	// If context is too long, truncate intelligently
+	if (context.length > MAX_CONTEXT_LENGTH) {
+		// Center the match in the context
+		const matchPosInContext = matchStart - contextStart;
+		const halfLength = Math.floor(MAX_CONTEXT_LENGTH / 2);
+
+		let truncStart = Math.max(0, matchPosInContext - halfLength);
+		let truncEnd = Math.min(context.length, matchPosInContext + halfLength);
+
+		// Adjust to not cut words
+		while (truncStart > 0 && context[truncStart - 1] !== ' ') {
+			truncStart--;
+		}
+		while (truncEnd < context.length && context[truncEnd] !== ' ') {
+			truncEnd++;
+		}
+
+		context = context.slice(truncStart, truncEnd).trim();
+	}
+
+	return context;
+}
+
+/**
+ * Find which term or alias matches in the text
+ * Returns the matched string and surrounding context, or null if no match
+ */
+function findMatch(text: string, originalText: string, term: Term): MatchResult | null {
 	const termsToCheck = [term.term, ...(term.aliases ?? [])];
 
 	for (const t of termsToCheck) {
@@ -160,9 +225,17 @@ function findMatch(text: string, term: Term): string | null {
 		// Use lookahead for whitespace, punctuation, or end of string instead
 		const endBoundary = isWordChar(t[t.length - 1]) ? '\\b' : '(?=[\\s,;:!?)\\]}>]|$)';
 
-		const pattern = new RegExp(`${startBoundary}${escaped}${endBoundary}`, 'i');
-		if (pattern.test(text)) {
-			return t;
+		const pattern = new RegExp(`${startBoundary}${escaped}${endBoundary}`, 'gi');
+		const match = pattern.exec(text);
+
+		if (match) {
+			// Extract context from the original (non-normalized) text
+			const context = extractContext(
+				originalText,
+				match.index,
+				match.index + match[0].length,
+			);
+			return { matchedOn: t, context };
 		}
 	}
 
