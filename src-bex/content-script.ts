@@ -46,13 +46,22 @@ const DESCRIPTION_SELECTORS = [
 ];
 
 /** Track the currently highlighted element for cleanup */
-let currentHighlight: HTMLElement | null = null;
+let currentHighlight: HTMLSpanElement | null = null;
 
 /**
- * Find the DOM element containing the matched term
+ * Represents a matched term's location in the DOM
+ */
+interface TermMatch {
+	textNode: Text;
+	startOffset: number;
+	endOffset: number;
+}
+
+/**
+ * Find the text node and exact position of the matched term
  * Uses TreeWalker to search text nodes in the job description
  */
-function findTermElement(matchedOn: string): HTMLElement | null {
+function findTermTextNode(matchedOn: string): TermMatch | null {
 	const searchTerm = matchedOn.toLowerCase();
 
 	for (const selector of DESCRIPTION_SELECTORS) {
@@ -64,14 +73,17 @@ function findTermElement(matchedOn: string): HTMLElement | null {
 
 		let node: Node | null;
 		while ((node = walker.nextNode())) {
-			const text = node.textContent?.toLowerCase() ?? '';
-			if (text.includes(searchTerm)) {
-				// Return the parent element of the text node
-				const parent = node.parentElement;
-				if (parent) {
-					console.log('[Job Parser] Found term in element:', parent.tagName);
-					return parent;
-				}
+			const text = node.textContent ?? '';
+			const lowerText = text.toLowerCase();
+			const index = lowerText.indexOf(searchTerm);
+
+			if (index !== -1) {
+				console.log('[Job Parser] Found term at offset', index, 'in text node');
+				return {
+					textNode: node as Text,
+					startOffset: index,
+					endOffset: index + matchedOn.length,
+				};
 			}
 		}
 	}
@@ -81,13 +93,44 @@ function findTermElement(matchedOn: string): HTMLElement | null {
 }
 
 /**
- * Clear any existing highlight
+ * Clear any existing highlight by unwrapping the span
+ * Restores the original text node structure
  */
 function clearHighlight(): void {
 	if (currentHighlight) {
-		currentHighlight.classList.remove('jp-highlight', 'jp-highlight--fade');
+		const parent = currentHighlight.parentNode;
+		if (parent) {
+			// Get the text content from the highlight span
+			const text = currentHighlight.textContent ?? '';
+			const textNode = document.createTextNode(text);
+
+			// Replace the span with the text node
+			parent.replaceChild(textNode, currentHighlight);
+
+			// Normalize to merge adjacent text nodes
+			parent.normalize();
+		}
 		currentHighlight = null;
 	}
+}
+
+/**
+ * Highlight the matched term by wrapping it in a span
+ * Uses the Range API to wrap only the exact matched text
+ */
+function highlightTermInNode(match: TermMatch): HTMLSpanElement {
+	const range = document.createRange();
+	range.setStart(match.textNode, match.startOffset);
+	range.setEnd(match.textNode, match.endOffset);
+
+	const span = document.createElement('span');
+	span.className = 'jp-highlight';
+
+	// Wrap the range contents in the span
+	range.surroundContents(span);
+
+	console.log('[Job Parser] Highlighted term:', span.textContent);
+	return span;
 }
 
 /**
@@ -130,7 +173,7 @@ async function expandJobDescription(): Promise<boolean> {
 }
 
 /**
- * Scroll to and highlight the element containing the matched term
+ * Scroll to and highlight the matched term
  */
 async function scrollToTerm(matchedOn: string): Promise<ScrollToTermResponse> {
 	// Clear any existing highlight
@@ -139,32 +182,32 @@ async function scrollToTerm(matchedOn: string): Promise<ScrollToTermResponse> {
 	// Expand description if collapsed
 	await expandJobDescription();
 
-	// Find the element containing the term
-	const element = findTermElement(matchedOn);
-	if (!element) {
+	// Find the text node containing the term
+	const match = findTermTextNode(matchedOn);
+	if (!match) {
 		return {
 			success: false,
 			error: 'Term not found on page. Try expanding the job description.',
 		};
 	}
 
-	// Scroll the element into view
-	element.scrollIntoView({
+	// Highlight the term using Range API (wraps in <span>)
+	const highlightSpan = highlightTermInNode(match);
+	currentHighlight = highlightSpan;
+
+	// Scroll the highlighted span into view
+	highlightSpan.scrollIntoView({
 		behavior: 'smooth',
 		block: 'center',
 	});
 
-	// Add highlight class
-	element.classList.add('jp-highlight');
-	currentHighlight = element;
-
 	// Fade out highlight after duration
 	setTimeout(() => {
-		if (currentHighlight === element) {
-			element.classList.add('jp-highlight--fade');
-			// Remove classes after fade animation
+		if (currentHighlight === highlightSpan) {
+			highlightSpan.classList.add('jp-highlight--fade');
+			// Remove highlight span after fade animation
 			setTimeout(() => {
-				if (currentHighlight === element) {
+				if (currentHighlight === highlightSpan) {
 					clearHighlight();
 				}
 			}, 500);

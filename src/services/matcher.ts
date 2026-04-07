@@ -218,10 +218,11 @@ function findMatch(text: string, originalText: string, term: Term): MatchResult 
 	for (const t of termsToCheck) {
 		const escaped = escapeRegex(t.toLowerCase());
 
-		// Word boundary at start (term shouldn't match mid-word like "JRuby" for "Ruby")
-		const startBoundary = '\\b';
+		// For start boundary: \b doesn't work if term starts with non-word char (.NET)
+		// Use lookbehind for whitespace, punctuation, or start of string instead
+		const startBoundary = isWordChar(t[0]) ? '\\b' : '(?<=[\\s,;:!?([{<]|^)';
 
-		// For trailing boundary: \b doesn't work if term ends with non-word char (C++, C#, .NET)
+		// For end boundary: \b doesn't work if term ends with non-word char (C++, C#, .NET)
 		// Use lookahead for whitespace, punctuation, or end of string instead
 		const endBoundary = isWordChar(t[t.length - 1]) ? '\\b' : '(?=[\\s,;:!?)\\]}>]|$)';
 
