@@ -3,9 +3,12 @@
 // =============================================================================
 
 /**
- * Whether the user wants or doesn't want this term in job descriptions
+ * How the user feels about this term in job descriptions
+ * - 'want': Must-have, positive when found
+ * - 'nice-to-have': Bonus points when found, no penalty when missing
+ * - 'dont-want': Red flag, negative when found
  */
-export type TermType = 'want' | 'dont-want';
+export type TermType = 'want' | 'nice-to-have' | 'dont-want';
 
 /**
  * Importance/weight of the term for scoring
@@ -28,6 +31,15 @@ export interface Term {
  */
 export interface TermsConfig {
 	terms: Term[];
+}
+
+/**
+ * Export format for terms (JSON file)
+ */
+export interface TermsExport {
+	version: 1;
+	exportedAt: string;
+	terms: Array<Omit<Term, 'id'>>;
 }
 
 // =============================================================================

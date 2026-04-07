@@ -6,7 +6,7 @@
 
 import { defineStore } from 'pinia';
 import { ref, computed } from 'vue';
-import type { Term, TermsConfig, TermType, TermWeight } from 'src/types';
+import type { Term, TermsConfig, TermsExport, TermType, TermWeight } from 'src/types';
 import { DEFAULT_TERMS_CONFIG } from 'src/types';
 import { getTermsConfig, setTermsConfig } from 'src/services/storage';
 
@@ -27,6 +27,8 @@ export const useTermsStore = defineStore('terms', () => {
 	const termCount = computed(() => terms.value.length);
 
 	const wantTerms = computed(() => terms.value.filter((t) => t.type === 'want'));
+
+	const niceToHaveTerms = computed(() => terms.value.filter((t) => t.type === 'nice-to-have'));
 
 	const dontWantTerms = computed(() => terms.value.filter((t) => t.type === 'dont-want'));
 
@@ -186,6 +188,60 @@ export const useTermsStore = defineStore('terms', () => {
 		return added;
 	}
 
+	/**
+	 * Export terms to JSON format
+	 */
+	function exportTermsToJson(): TermsExport {
+		return {
+			version: 1,
+			exportedAt: new Date().toISOString(),
+			terms: terms.value.map(({ term, aliases, type, weight }) => ({
+				term,
+				type,
+				weight,
+				...(aliases?.length ? { aliases } : {}),
+			})),
+		};
+	}
+
+	/**
+	 * Import terms from JSON format (merges with existing, skips duplicates)
+	 */
+	async function importTermsFromJson(
+		data: TermsExport,
+	): Promise<{ added: number; skipped: number }> {
+		let added = 0;
+		let skipped = 0;
+
+		for (const item of data.terms) {
+			const trimmed = item.term.trim();
+			if (!trimmed) continue;
+
+			const exists = terms.value.some((t) => t.term.toLowerCase() === trimmed.toLowerCase());
+			if (exists) {
+				skipped++;
+				continue;
+			}
+
+			const cleanAliases = item.aliases?.map((a) => a.trim()).filter((a) => a.length > 0);
+
+			terms.value.push({
+				id: crypto.randomUUID(),
+				term: trimmed,
+				type: item.type ?? 'want',
+				weight: item.weight ?? 'low',
+				...(cleanAliases && cleanAliases.length > 0 ? { aliases: cleanAliases } : {}),
+			});
+			added++;
+		}
+
+		if (added > 0) {
+			await save();
+		}
+
+		return { added, skipped };
+	}
+
 	return {
 		// State
 		terms,
@@ -196,6 +252,7 @@ export const useTermsStore = defineStore('terms', () => {
 		// Getters
 		termCount,
 		wantTerms,
+		niceToHaveTerms,
 		dontWantTerms,
 		asConfig,
 
@@ -207,5 +264,7 @@ export const useTermsStore = defineStore('terms', () => {
 		removeTerm,
 		clearAll,
 		importTerms,
+		exportTermsToJson,
+		importTermsFromJson,
 	};
 });

@@ -11,9 +11,22 @@ import type { Term, MatchedTerm, ParsedJob, ParseResult } from 'src/types';
 // Scoring constants
 // =============================================================================
 
-const WEIGHT_POINTS = {
+// Bonus points for found want/nice-to-have terms (added on top of 100%)
+const WANT_BONUS = {
+	low: 1,
+	high: 3,
+} as const;
+
+const NICE_TO_HAVE_BONUS = {
 	low: 1,
 	high: 2,
+} as const;
+
+// Penalty for found dont-want terms (subtracted from score)
+// Higher penalties since filtering negatives is the priority
+const DONT_WANT_PENALTY = {
+	low: 10,
+	high: 25,
 } as const;
 
 // =============================================================================
@@ -62,15 +75,18 @@ export function matchTerms(job: ParsedJob | null, terms: Term[]): ParseResult {
 // =============================================================================
 
 /**
- * Calculate match score as a percentage (0-100)
+ * Calculate match score as a percentage
  *
- * Scoring logic:
- * - Found "want" terms: +1 (low) or +2 (high) points
- * - Missing "want" terms: 0 points (no penalty)
- * - Found "dont-want" terms: -1 (low) or -2 (high) points
- * - Missing "dont-want" terms: +0.5 (low) or +1 (high) points (reward for absence)
+ * Scoring logic (penalty-focused):
+ * - Start at 100%
+ * - Found "want" terms: +2% (low) or +5% (high) bonus
+ * - Missing "want" terms: no effect (neutral)
+ * - Found "nice-to-have" terms: +1% (low) or +2% (high) bonus
+ * - Missing "nice-to-have" terms: no effect (neutral)
+ * - Found "dont-want" terms: -10% (low) or -20% (high) penalty
+ * - Missing "dont-want" terms: no effect (neutral)
  *
- * Score = (actual points / max possible points) * 100, clamped to 0-100
+ * Score can exceed 100% with many matches, clamped to 0 minimum
  */
 function calculateScore(foundTerms: MatchedTerm[], missingTerms: Term[]): number | null {
 	const allTerms = [...foundTerms.map((f) => f.term), ...missingTerms];
@@ -80,47 +96,25 @@ function calculateScore(foundTerms: MatchedTerm[], missingTerms: Term[]): number
 		return null;
 	}
 
-	let actualPoints = 0;
-	let maxPoints = 0;
+	// Start at 100%
+	let score = 100;
 
-	// Process found terms
+	// Process found terms only (missing terms have no effect)
 	for (const { term } of foundTerms) {
-		const points = WEIGHT_POINTS[term.weight];
-
 		if (term.type === 'want') {
-			// Found a wanted term: add points
-			actualPoints += points;
-			maxPoints += points;
+			// Found a wanted term: bonus points
+			score += WANT_BONUS[term.weight];
+		} else if (term.type === 'nice-to-have') {
+			// Found a nice-to-have term: smaller bonus
+			score += NICE_TO_HAVE_BONUS[term.weight];
 		} else {
-			// Found a "don't want" term: subtract points
-			actualPoints -= points;
-			// Max points includes the reward for NOT having this term
-			maxPoints += points * 0.5;
+			// Found a "don't want" term: penalty
+			score -= DONT_WANT_PENALTY[term.weight];
 		}
 	}
 
-	// Process missing terms
-	for (const term of missingTerms) {
-		const points = WEIGHT_POINTS[term.weight];
-
-		if (term.type === 'want') {
-			// Missing a wanted term: no points, but counts toward max
-			maxPoints += points;
-		} else {
-			// Missing a "don't want" term: reward!
-			actualPoints += points * 0.5;
-			maxPoints += points * 0.5;
-		}
-	}
-
-	// Avoid division by zero
-	if (maxPoints === 0) {
-		return null;
-	}
-
-	// Calculate percentage, clamped to 0-100
-	const percentage = (actualPoints / maxPoints) * 100;
-	return Math.round(Math.max(0, Math.min(100, percentage)));
+	// Clamp to minimum 0 (no upper limit - good jobs can exceed 100%)
+	return Math.max(0, Math.round(score));
 }
 
 // =============================================================================
@@ -142,6 +136,14 @@ function escapeRegex(str: string): string {
 }
 
 /**
+ * Check if a character is a word character (letter, digit, underscore)
+ */
+function isWordChar(char: string | undefined): boolean {
+	if (!char) return false;
+	return /[a-zA-Z0-9_]/.test(char);
+}
+
+/**
  * Find which term or alias matches in the text
  * Returns the matched string, or null if no match
  */
@@ -149,9 +151,16 @@ function findMatch(text: string, term: Term): string | null {
 	const termsToCheck = [term.term, ...(term.aliases ?? [])];
 
 	for (const t of termsToCheck) {
-		// Use word boundary matching to avoid partial matches
-		// e.g., "Vue" shouldn't match "value"
-		const pattern = new RegExp(`\\b${escapeRegex(t.toLowerCase())}\\b`, 'i');
+		const escaped = escapeRegex(t.toLowerCase());
+
+		// Word boundary at start (term shouldn't match mid-word like "JRuby" for "Ruby")
+		const startBoundary = '\\b';
+
+		// For trailing boundary: \b doesn't work if term ends with non-word char (C++, C#, .NET)
+		// Use lookahead for whitespace, punctuation, or end of string instead
+		const endBoundary = isWordChar(t[t.length - 1]) ? '\\b' : '(?=[\\s,;:!?)\\]}>]|$)';
+
+		const pattern = new RegExp(`${startBoundary}${escaped}${endBoundary}`, 'i');
 		if (pattern.test(text)) {
 			return t;
 		}

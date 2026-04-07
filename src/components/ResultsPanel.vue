@@ -58,6 +58,13 @@
 					:label="`${foundWantTerms.length} Matched`"
 				/>
 				<q-chip
+					v-if="foundNiceToHaveTerms.length > 0"
+					color="blue"
+					text-color="white"
+					icon="star"
+					:label="`${foundNiceToHaveTerms.length} Bonus`"
+				/>
+				<q-chip
 					v-if="missingWantTerms.length > 0"
 					color="grey"
 					text-color="white"
@@ -149,6 +156,44 @@
 				</q-list>
 			</q-expansion-item>
 
+			<!-- Nice to Have Terms (Found) -->
+			<q-expansion-item
+				v-if="foundNiceToHaveTerms.length > 0"
+				default-opened
+				icon="star"
+				label="Nice to Have"
+				header-class="text-blue-7"
+				class="q-mb-sm"
+			>
+				<q-list dense separator>
+					<q-item v-for="match in foundNiceToHaveTerms" :key="match.term.id">
+						<q-item-section>
+							<q-item-label>
+								{{ match.term.term }}
+								<q-badge
+									v-if="match.term.weight === 'high'"
+									color="orange"
+									text-color="white"
+									class="q-ml-xs"
+								>
+									High
+								</q-badge>
+							</q-item-label>
+							<q-item-label
+								v-if="match.matchedOn !== match.term.term"
+								caption
+								class="text-grey-6"
+							>
+								matched as "{{ match.matchedOn }}"
+							</q-item-label>
+						</q-item-section>
+						<q-item-section side>
+							<q-icon name="star" color="blue" />
+						</q-item-section>
+					</q-item>
+				</q-list>
+			</q-expansion-item>
+
 			<!-- Missing Terms (Want) -->
 			<q-expansion-item
 				v-if="missingWantTerms.length > 0"
@@ -210,6 +255,10 @@ const foundWantTerms = computed(
 	() => props.parseResult?.foundTerms.filter((m) => m.term.type === 'want') ?? [],
 );
 
+const foundNiceToHaveTerms = computed(
+	() => props.parseResult?.foundTerms.filter((m) => m.term.type === 'nice-to-have') ?? [],
+);
+
 const foundDontWantTerms = computed(
 	() => props.parseResult?.foundTerms.filter((m) => m.term.type === 'dont-want') ?? [],
 );
@@ -218,7 +267,7 @@ const missingWantTerms = computed(
 	() => props.parseResult?.missingTerms.filter((t) => t.type === 'want') ?? [],
 );
 
-// Don't show missing "don't want" terms - they're not important
+// Don't show missing "nice-to-have" or "don't want" terms - they're not important
 
 const hasNoTerms = computed(() => {
 	if (!props.parseResult) return false;
