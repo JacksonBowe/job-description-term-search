@@ -3,7 +3,9 @@
  */
 
 import type { ParseAttempt } from 'src/types';
-import { parseLinkedInJobDetail, isLinkedInJobPage } from './linkedin';
+import { parseLinkedInJobDetail, isLinkedInJobPage, hasJobContent } from './linkedin';
+
+export { hasJobContent };
 
 // =============================================================================
 // Main Functions

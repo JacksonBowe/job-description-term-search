@@ -39,12 +39,32 @@
 				v-if="parseResult.score !== null"
 				flat
 				bordered
-				class="q-mb-md"
+				class="q-mb-md cursor-pointer"
 				:class="scoreCardClass"
 			>
 				<q-card-section class="text-center q-py-md">
 					<div class="text-h4 text-weight-bold">{{ parseResult.score }}%</div>
 					<div class="text-caption">Match Score</div>
+					<q-tooltip>
+						<div class="text-body2">
+							<div>Base: 100%</div>
+							<div v-if="scoreBreakdown.wantBonus > 0" class="text-green">
+								+ {{ scoreBreakdown.wantBonus }}% ({{ foundWantTerms.length }}
+								matched)
+							</div>
+							<div v-if="scoreBreakdown.niceBonus > 0" class="text-blue">
+								+ {{ scoreBreakdown.niceBonus }}% ({{ foundNiceToHaveTerms.length }}
+								bonus)
+							</div>
+							<div v-if="scoreBreakdown.dontWantPenalty > 0" class="text-red">
+								- {{ scoreBreakdown.dontWantPenalty }}% ({{
+									foundDontWantTerms.length
+								}}
+								red flag{{ foundDontWantTerms.length > 1 ? 's' : '' }})
+							</div>
+							<div class="text-weight-bold q-mt-xs">= {{ parseResult.score }}%</div>
+						</div>
+					</q-tooltip>
 				</q-card-section>
 			</q-card>
 
@@ -194,11 +214,12 @@
 				</q-list>
 			</q-expansion-item>
 
-			<!-- Missing Terms (Want) -->
+			<!-- Missing Terms (Want) - Not required by job, informational only -->
 			<q-expansion-item
 				v-if="missingWantTerms.length > 0"
-				icon="help_outline"
-				label="Missing Skills"
+				icon="info_outline"
+				label="Not Mentioned"
+				caption="Skills you have that weren't listed"
 				header-class="text-grey-7"
 			>
 				<q-list dense separator>
@@ -274,11 +295,36 @@ const hasNoTerms = computed(() => {
 	return props.parseResult.foundTerms.length === 0 && props.parseResult.missingTerms.length === 0;
 });
 
+// Score breakdown for tooltip - mirrors the logic in matcher.ts
+const WANT_BONUS = { low: 1, high: 3 } as const;
+const NICE_TO_HAVE_BONUS = { low: 1, high: 2 } as const;
+const DONT_WANT_PENALTY = { low: 10, high: 25 } as const;
+
+const scoreBreakdown = computed(() => {
+	let wantBonus = 0;
+	let niceBonus = 0;
+	let dontWantPenalty = 0;
+
+	for (const match of foundWantTerms.value) {
+		wantBonus += WANT_BONUS[match.term.weight];
+	}
+
+	for (const match of foundNiceToHaveTerms.value) {
+		niceBonus += NICE_TO_HAVE_BONUS[match.term.weight];
+	}
+
+	for (const match of foundDontWantTerms.value) {
+		dontWantPenalty += DONT_WANT_PENALTY[match.term.weight];
+	}
+
+	return { wantBonus, niceBonus, dontWantPenalty };
+});
+
 const scoreCardClass = computed(() => {
 	const score = props.parseResult?.score;
 	if (score === null || score === undefined) return '';
-	if (score >= 70) return 'bg-green-1 text-green-9';
-	if (score >= 40) return 'bg-orange-1 text-orange-9';
+	if (score >= 100) return 'bg-green-1 text-green-9';
+	if (score >= 75) return 'bg-orange-1 text-orange-9';
 	return 'bg-red-1 text-red-9';
 });
 </script>

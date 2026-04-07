@@ -8,7 +8,7 @@
  *   Do not remove the import statement below. It is required for the extension to work.
  */
 import { createBridge } from '#q-app/bex/content';
-import { parseCurrentJob, isJobPage } from './parsers';
+import { parseCurrentJob, isJobPage, hasJobContent } from './parsers';
 import type { ParseJobResponse, ParseAttempt } from 'src/types';
 
 // =============================================================================
@@ -29,6 +29,56 @@ declare module '@quasar/app-vite' {
 // =============================================================================
 // Message Handlers
 // =============================================================================
+
+/** Default timeout for waiting for job content to load (ms) */
+const CONTENT_LOAD_TIMEOUT = 5000;
+
+/**
+ * Wait for job content to load on the page
+ * Uses MutationObserver to detect when job description appears
+ * @param timeout - Maximum time to wait in ms
+ * @returns true if content loaded, false if timeout reached
+ */
+async function waitForJobContent(timeout = CONTENT_LOAD_TIMEOUT): Promise<boolean> {
+	// Check if content already exists
+	if (hasJobContent()) {
+		console.log('[Job Parser] Job content already loaded');
+		return true;
+	}
+
+	console.log('[Job Parser] Waiting for job content to load...');
+
+	return new Promise((resolve) => {
+		let resolved = false;
+
+		// Set up MutationObserver to watch for content appearing
+		const observer = new MutationObserver(() => {
+			if (!resolved && hasJobContent()) {
+				resolved = true;
+				observer.disconnect();
+				console.log('[Job Parser] Job content loaded');
+				resolve(true);
+			}
+		});
+
+		// Watch the document body for changes
+		observer.observe(document.body, {
+			childList: true,
+			subtree: true,
+		});
+
+		// Timeout handler
+		setTimeout(() => {
+			if (!resolved) {
+				resolved = true;
+				observer.disconnect();
+				const found = hasJobContent(); // Final check
+				console.log(`[Job Parser] Wait timeout reached, content found: ${found}`);
+				resolve(found);
+			}
+		}, timeout);
+	});
+}
 
 /**
  * Handle parse request via bridge
@@ -58,16 +108,28 @@ chrome.runtime.onMessage.addListener(
 				return true;
 			}
 
-			const result = parseCurrentJob();
+			// Wait for content to load, then parse
+			void waitForJobContent().then((contentLoaded) => {
+				if (!contentLoaded) {
+					sendResponse({
+						job: null,
+						error: 'Job content failed to load. Try refreshing the page.',
+					});
+					return;
+				}
 
-			if (result.success) {
-				sendResponse({ job: result.job });
-			} else {
-				sendResponse({
-					job: null,
-					error: result.error,
-				});
-			}
+				const result = parseCurrentJob();
+
+				if (result.success) {
+					sendResponse({ job: result.job });
+				} else {
+					sendResponse({
+						job: null,
+						error: result.error,
+					});
+				}
+			});
+
 			return true; // Keep channel open for async response
 		}
 

@@ -207,3 +207,18 @@ export function isLinkedInJobPage(): boolean {
 	const url = window.location.href;
 	return url.includes('linkedin.com/jobs/');
 }
+
+/**
+ * Check if job content is currently loaded in the DOM
+ * Used to detect when LinkedIn has finished loading job details
+ */
+export function hasJobContent(): boolean {
+	for (const selector of SELECTORS.description) {
+		const el = document.querySelector<HTMLElement>(selector);
+		const text = el?.textContent?.trim();
+		if (text && text.length > 50) {
+			return true;
+		}
+	}
+	return false;
+}
