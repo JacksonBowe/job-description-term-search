@@ -1,6 +1,6 @@
 {
   "name": "job-description-term-search",
-  "version": "0.0.1",
+  "version": "1.0.0",
   "description": "Browser extension to search job descriptions for configurable terms and score matches",
   "productName": "Job Description Term Search",
   "author": "JacksonBowe <jacksonbowe98@gmail.com>",
