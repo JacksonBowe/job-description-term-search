@@ -1,6 +1,10 @@
+![Example Image](example.png 'Job Description Term Search')
+
 # Job Description Term Search (JDTS)
 
 A browser extension that helps you quickly evaluate job postings by searching for terms you care about. Configure skills you want, nice-to-haves, and red flags - then get instant scores when browsing jobs on LinkedIn and Seek.
+
+Video showcasing it [here](https://www.linkedin.com/posts/jackson-bowe-a43103223_i-built-a-chrome-extension-to-make-job-searching-ugcPost-7447475235626549248-TwPx?utm_source=share&utm_medium=member_desktop&rcm=ACoAADgUFhMB3cdKLj0NZzABB_vSDFLimTVSrjM)
 
 ## Features
 
