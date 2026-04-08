@@ -2,7 +2,7 @@
 	<q-layout view="hHh lpr fFf">
 		<q-header elevated class="bg-primary">
 			<q-toolbar class="panel-header">
-				<q-toolbar-title class="text-subtitle1">Job Parser</q-toolbar-title>
+				<q-toolbar-title class="text-subtitle1">JDTS</q-toolbar-title>
 				<q-btn flat round dense icon="refresh" @click="parseJob" :loading="isParsing">
 					<q-tooltip>Parse current job</q-tooltip>
 				</q-btn>
@@ -52,25 +52,39 @@ let lastJobId: string | null = null;
 // =============================================================================
 
 /**
- * Extract job ID from a LinkedIn URL
+ * Extract job ID from URL
  * Supports:
+ * LinkedIn:
  * - /jobs/view/12345/
  * - /jobs/search/?currentJobId=12345
  * - /jobs/search-results/?currentJobId=12345
  * - /jobs/collections/?currentJobId=12345
+ * Seek:
+ * - /job/12345
+ * - ?jobId=12345
  */
 function getJobIdFromUrl(url: string): string | null {
-	// Try /jobs/view/{id} pattern
-	const viewMatch = url.match(/\/jobs\/view\/(\d+)/);
-	if (viewMatch?.[1]) return viewMatch[1];
+	// Try LinkedIn /jobs/view/{id} pattern
+	const linkedInViewMatch = url.match(/\/jobs\/view\/(\d+)/);
+	if (linkedInViewMatch?.[1]) return `linkedin-${linkedInViewMatch[1]}`;
 
-	// Try currentJobId query parameter
+	// Try Seek /job/{id} pattern
+	const seekJobMatch = url.match(/\/job\/(\d+)/);
+	if (seekJobMatch?.[1]) return `seek-${seekJobMatch[1]}`;
+
+	// Try query parameters (currentJobId for LinkedIn, jobId for Seek)
 	try {
 		const params = new URL(url).searchParams;
-		return params.get('currentJobId');
+		const linkedInJobId = params.get('currentJobId');
+		if (linkedInJobId) return `linkedin-${linkedInJobId}`;
+
+		const seekJobId = params.get('jobId');
+		if (seekJobId) return `seek-${seekJobId}`;
 	} catch {
 		return null;
 	}
+
+	return null;
 }
 
 // =============================================================================
@@ -84,17 +98,19 @@ function handleTabUpdate(tabId: number, changeInfo: { url?: string }, tab: chrom
 	// Only react to URL changes on the active tab
 	if (!changeInfo.url || !tab.active) return;
 
-	// Only react to LinkedIn job pages
-	if (!changeInfo.url.includes('linkedin.com/jobs')) return;
+	// Only react to supported job pages
+	const isJobPage =
+		changeInfo.url.includes('linkedin.com/jobs') || changeInfo.url.includes('seek.com.au');
+	if (!isJobPage) return;
 
 	// Extract job ID from the new URL
 	const jobId = getJobIdFromUrl(changeInfo.url);
 
 	// Only re-parse if the job ID changed
 	if (jobId && jobId !== lastJobId) {
-		console.log('[Job Parser] Job changed, auto-parsing:', jobId);
+		console.log('[JDTS] Job changed, auto-parsing:', jobId);
 		lastJobId = jobId;
-		parseJob().catch((err) => console.error('[Job Parser] Auto-parse failed:', err));
+		parseJob().catch((err) => console.error('[JDTS] Auto-parse failed:', err));
 	}
 }
 
@@ -124,22 +140,26 @@ async function parseJob(): Promise<void> {
 			return;
 		}
 
-		// Check if we're on a LinkedIn page
-		if (!tab.url?.includes('linkedin.com/jobs')) {
+		// Check if we're on a supported job page
+		const isJobPage =
+			tab.url?.includes('linkedin.com/jobs') || tab.url?.includes('seek.com.au');
+		if (!isJobPage) {
 			parseResult.value = {
 				job: null,
 				foundTerms: [],
 				missingTerms: termsStore.terms,
 				score: null,
-				error: 'Navigate to a LinkedIn job page to parse',
+				error: 'Navigate to a LinkedIn or Seek job page to parse',
 			};
 			return;
 		}
 
 		// Update lastJobId from current URL
-		const jobId = getJobIdFromUrl(tab.url);
-		if (jobId) {
-			lastJobId = jobId;
+		if (tab.url) {
+			const jobId = getJobIdFromUrl(tab.url);
+			if (jobId) {
+				lastJobId = jobId;
+			}
 		}
 
 		// Send message to content script
@@ -162,13 +182,13 @@ async function parseJob(): Promise<void> {
 		// Match terms against the job description
 		parseResult.value = matchTerms(response.job, termsStore.terms);
 	} catch (error) {
-		console.error('[Job Parser] Parse error:', error);
+		console.error('[JDTS] Parse error:', error);
 		parseResult.value = {
 			job: null,
 			foundTerms: [],
 			missingTerms: termsStore.terms,
 			score: null,
-			error: 'Could not connect to page. Try refreshing the LinkedIn page.',
+			error: 'Could not connect to page. Try refreshing the page.',
 		};
 	} finally {
 		isParsing.value = false;

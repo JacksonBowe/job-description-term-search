@@ -84,7 +84,7 @@ export interface ParseResult {
  * Keys used for chrome.storage.local
  */
 export const STORAGE_KEYS = {
-	TERMS: 'job-parser:terms',
+	TERMS: 'jdts:terms',
 } as const;
 
 export type StorageKey = (typeof STORAGE_KEYS)[keyof typeof STORAGE_KEYS];

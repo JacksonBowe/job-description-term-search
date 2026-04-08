@@ -1,0 +1,26 @@
+{
+  "$schema": "./fixtures.schema.json",
+  "_comment": "Add your test fixtures here. Each key is a unique test name.",
+  "linkedin-job": {
+    "file": "html/linkedin-search-results.html",
+    "url": "https://www.linkedin.com/jobs/search-results/?currentJobId=4394761665",
+    "platform": "linkedin",
+    "expected": {
+      "title": "Senior TechnologyOne Technical Consultant",
+      "company": "Nexus Digital",
+      "shouldMatch": ["APIs"],
+      "shouldNotMatch": ["Cobol"]
+    }
+  },
+  "seek-job": {
+    "file": "html/seek-search-results.html",
+    "url": "https://www.seek.com.au/software-engineering-manager-jobs/in-All-Brisbane-QLD?jobId=91280608&type=promoted",
+    "platform": "seek",
+    "expected": {
+      "title": "Senior Developer",
+      "company": "Horizon Insurance",
+      "shouldMatch": ["Typescript", "AWS", "Vue", "React", "Angular"],
+      "shouldNotMatch": ["Azure", "Cobol", "PHP"]
+    }
+  }
+}

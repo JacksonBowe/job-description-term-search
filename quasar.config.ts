@@ -196,7 +196,7 @@ export default defineConfig((/* ctx */) => {
 			builder: {
 				// https://www.electron.build/configuration
 
-				appId: 'job-parser',
+				appId: 'job-description-term-search',
 			},
 		},
 

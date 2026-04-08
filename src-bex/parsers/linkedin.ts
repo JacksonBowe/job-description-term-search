@@ -63,7 +63,7 @@ export function parseLinkedInJobDetail(): ParseAttempt {
 	// Check if we're on a job detail view
 	const jobId = getJobIdFromUrl();
 	if (!jobId) {
-		console.log('[Job Parser] No job ID found in URL');
+		console.log('[JDTS] No job ID found in URL');
 		return {
 			success: false,
 			error: 'No job selected. Click on a job to view its details.',
@@ -74,7 +74,7 @@ export function parseLinkedInJobDetail(): ParseAttempt {
 		// Extract description first - this is the most reliable indicator we're on a job page
 		const description = findDescription();
 		if (!description) {
-			console.log('[Job Parser] No job description found');
+			console.log('[JDTS] No job description found');
 			return {
 				success: false,
 				error: "Couldn't find job description. The job may still be loading, or LinkedIn may have updated their layout.",
@@ -84,7 +84,7 @@ export function parseLinkedInJobDetail(): ParseAttempt {
 		// Extract title - prefer document.title as it's most stable
 		const title = extractTitleFromPage();
 		if (!title) {
-			console.log('[Job Parser] No job title found');
+			console.log('[JDTS] No job title found');
 			return {
 				success: false,
 				error: "Couldn't find job title.",
@@ -94,7 +94,7 @@ export function parseLinkedInJobDetail(): ParseAttempt {
 		// Extract company
 		const company = findCompany();
 
-		console.log('[Job Parser] Successfully parsed job:', { title, company });
+		console.log('[JDTS] Successfully parsed job:', { title, company });
 
 		return {
 			success: true,
@@ -106,7 +106,7 @@ export function parseLinkedInJobDetail(): ParseAttempt {
 			},
 		};
 	} catch (error) {
-		console.warn('[Job Parser] Failed to parse LinkedIn job:', error);
+		console.warn('[JDTS] Failed to parse LinkedIn job:', error);
 		return {
 			success: false,
 			error: `Unexpected error while parsing: ${error instanceof Error ? error.message : 'Unknown error'}`,
@@ -152,11 +152,14 @@ function extractTitleFromPage(): string | null {
  */
 function findCompany(): string {
 	for (const selector of SELECTORS.company) {
-		const el = document.querySelector<HTMLElement>(selector);
-		const text = el?.textContent?.trim();
-		if (text && text.length > 0 && text.length < 200) {
-			// Clean up company name (remove follower counts like "Company383 followers")
-			return text.replace(/\d+\s*followers?$/i, '').trim() || text;
+		// Use querySelectorAll since there may be multiple matches (logo link vs text link)
+		const elements = document.querySelectorAll<HTMLElement>(selector);
+		for (const el of elements) {
+			const text = el?.textContent?.trim();
+			if (text && text.length > 0 && text.length < 200) {
+				// Clean up company name (remove follower counts like "Company383 followers")
+				return text.replace(/\d+\s*followers?$/i, '').trim() || text;
+			}
 		}
 	}
 	return 'Unknown Company';

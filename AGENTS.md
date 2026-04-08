@@ -2,54 +2,70 @@
 
 ## Project Overview
 
-Quasar BEX (Browser Extension) for Chrome/Firefox. Parses LinkedIn and Seek job listings, scores them against user skills, and injects badges/overlays inline.
+**Job Description Term Search (JDTS)** - A Quasar BEX (Browser Extension) for Chrome/Firefox. Parses LinkedIn and Seek job listings, matches them against user-defined terms (skills, keywords, red flags), and displays scores in a side panel.
 
 ## Commands
 
 ```bash
 # Development (Chrome BEX mode)
-pnpm dev          # or: quasar dev -m bex -T chrome
+npm run dev       # or: quasar dev -m bex -T chrome
 
 # Lint & Format
-pnpm lint         # ESLint with Vue + TypeScript
-pnpm format       # Prettier
+npm run lint      # ESLint with Vue + TypeScript
+npm run format    # Prettier
 
 # Build
-pnpm build        # quasar build
+npm run build     # quasar build -m bex -T chrome
+
+# Test
+npm run test      # Run tests with Vitest
+npm run test:watch    # Watch mode
+npm run test:coverage # With coverage report
 ```
 
 ## Architecture
 
-- **`src/`** - Quasar Vue app (popup UI, Pinia stores, components)
+- **`src/`** - Quasar Vue app (side panel UI, Pinia stores, components)
+  - `components/` - Vue components (SettingsPanel, ResultsPanel, TermListItem)
+  - `services/` - Business logic (matcher.ts for scoring, storage.ts)
+  - `stores/` - Pinia stores (termsStore)
+  - `types/` - TypeScript type definitions
 - **`src-bex/`** - Extension-specific code:
-  - `background.ts` - Service worker, `chrome.storage` bridge events
-  - `my-content-script.ts` - Content script (to be replaced per roadmap)
-  - `manifest.json` - Manifest v3, currently runs on `<all_urls>` (restrict to LinkedIn/Seek)
+  - `background.ts` - Service worker, chrome.storage bridge, side panel handling
+  - `content-script.ts` - Content script for parsing job pages
+  - `parsers/` - Site-specific parsers (linkedin.ts, seek.ts)
+  - `manifest.json` - Manifest v3, restricted to LinkedIn/Seek domains
+- **`test/`** - Test files and fixtures
+  - `fixtures/html/` - HTML snapshots of job pages for testing
 
-Communication between popup, background, and content scripts uses **Quasar Bridge** (`createBridge`).
+Communication between side panel, background, and content scripts uses **chrome.runtime messaging** and **Quasar Bridge**.
 
 ## Key Technical Details
 
 - **Manifest v3** - Required for Chrome Web Store
-- **Pinia + chrome.storage.local** - Stores sync to extension storage via bridge events
-- **CSS injection** - Use `assets/content.css` for injected UI to avoid CSP issues
+- **Side Panel UI** - Uses Chrome's sidePanel API (Firefox: sidebar_action)
+- **Pinia + chrome.storage.local** - Terms persist to extension storage
 - **TypeScript strict mode** enabled via `quasar.config.ts`
 - **ESLint** uses flat config (`eslint.config.js`) with `@typescript-eslint/consistent-type-imports` enforced
-
-## Roadmap Reference
-
-See `plans/roadmap.md` for detailed implementation phases:
-
-1. Foundation (types, storage, scoring)
-2. Site parsers (LinkedIn, Seek content scripts)
-3. UI injection (badges, overlays)
-4. Popup UI (settings, job list)
-5. Integration (bridge events, MutationObserver)
+- **Vitest** for unit testing with happy-dom environment
 
 ## BEX Development Notes
 
-- Content script entry: `src-bex/my-content-script.ts` (rename to `content-script.ts` per roadmap)
+- Content script entry: `src-bex/content-script.ts`
 - Bridge events declared via `BexEventMap` interface augmentation
-- Storage events: `storage.get`, `storage.set`, `storage.remove` already implemented in background
-- Parsers should go in `src-bex/parsers/` (linkedin.ts, seek.ts)
-- Injected UI should go in `src-bex/injector/` (badge.ts, overlay.ts)
+- Storage events: `storage.get`, `storage.set`, `storage.remove` implemented in background
+- Parsers in `src-bex/parsers/` (linkedin.ts, seek.ts)
+- Site detection based on URL patterns in manifest.json
+
+## Testing
+
+Tests are located in `test/` directory:
+
+- `matcher.test.ts` - Unit tests for scoring logic
+- `parsers.test.ts` - Parser tests using HTML fixtures
+
+To add new test fixtures:
+
+1. Save a job page HTML to `test/fixtures/html/`
+2. Add entry to `test/fixtures.json` with URL and expected terms
+3. Run tests to verify parsing

@@ -1,0 +1,47 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "additionalProperties": {
+    "type": "object",
+    "required": ["file", "url", "platform", "expected"],
+    "properties": {
+      "file": {
+        "type": "string",
+        "description": "Path to the HTML file relative to fixtures directory"
+      },
+      "url": {
+        "type": "string",
+        "description": "Original URL where the HTML was saved from"
+      },
+      "platform": {
+        "type": "string",
+        "enum": ["linkedin", "seek"],
+        "description": "Which job platform this fixture is from"
+      },
+      "expected": {
+        "type": "object",
+        "required": ["title", "company", "shouldMatch"],
+        "properties": {
+          "title": {
+            "type": "string",
+            "description": "Expected job title to be extracted"
+          },
+          "company": {
+            "type": "string",
+            "description": "Expected company name to be extracted"
+          },
+          "shouldMatch": {
+            "type": "array",
+            "items": { "type": "string" },
+            "description": "Terms that should be found in the job description"
+          },
+          "shouldNotMatch": {
+            "type": "array",
+            "items": { "type": "string" },
+            "description": "Terms that should NOT be found in the job description"
+          }
+        }
+      }
+    }
+  }
+}

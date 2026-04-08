@@ -1,7 +1,7 @@
 /**
- * Content script for Job Parser extension
+ * Content script for JDTS (Job Description Term Search) extension
  *
- * This script runs on LinkedIn job pages.
+ * This script runs on LinkedIn and Seek job pages.
  * It responds to parse requests from the side panel.
  *
  * Warning:
@@ -38,11 +38,14 @@ const HIGHLIGHT_DURATION = 2000;
 
 /** Selectors for job description containers */
 const DESCRIPTION_SELECTORS = [
+	// LinkedIn selectors
 	'[data-testid="expandable-text-box"]',
 	'.jobs-description__content',
 	'.jobs-box__html-content',
 	'.jobs-description-content__text',
 	'#job-details',
+	// Seek selectors
+	'[data-automation="jobAdDetails"]',
 ];
 
 /** Track the currently highlighted element for cleanup */
@@ -78,7 +81,7 @@ function findTermTextNode(matchedOn: string): TermMatch | null {
 			const index = lowerText.indexOf(searchTerm);
 
 			if (index !== -1) {
-				console.log('[Job Parser] Found term at offset', index, 'in text node');
+				console.log('[JDTS] Found term at offset', index, 'in text node');
 				return {
 					textNode: node as Text,
 					startOffset: index,
@@ -88,7 +91,7 @@ function findTermTextNode(matchedOn: string): TermMatch | null {
 		}
 	}
 
-	console.log('[Job Parser] Term not found in DOM:', matchedOn);
+	console.log('[JDTS] Term not found in DOM:', matchedOn);
 	return null;
 }
 
@@ -129,7 +132,7 @@ function highlightTermInNode(match: TermMatch): HTMLSpanElement {
 	// Wrap the range contents in the span
 	range.surroundContents(span);
 
-	console.log('[Job Parser] Highlighted term:', span.textContent);
+	console.log('[JDTS] Highlighted term:', span.textContent);
 	return span;
 }
 
@@ -145,18 +148,18 @@ async function expandJobDescription(): Promise<boolean> {
 	);
 
 	if (!button) {
-		console.log('[Job Parser] No expand button found');
+		console.log('[JDTS] No expand button found');
 		return false;
 	}
 
 	// Check if it's a "more" button (not "less")
 	const text = button.textContent?.toLowerCase() ?? '';
 	if (!text.includes('more')) {
-		console.log('[Job Parser] Description already expanded');
+		console.log('[JDTS] Description already expanded');
 		return false; // Already expanded (shows "less")
 	}
 
-	console.log('[Job Parser] Expanding job description...');
+	console.log('[JDTS] Expanding job description...');
 
 	// The button has pointer-events: none, but inner span has pointer-events: auto
 	// Find the clickable span inside
@@ -168,7 +171,7 @@ async function expandJobDescription(): Promise<boolean> {
 	// Wait for expansion animation
 	await new Promise((resolve) => setTimeout(resolve, 300));
 
-	console.log('[Job Parser] Job description expanded');
+	console.log('[JDTS] Job description expanded');
 	return true;
 }
 
@@ -214,7 +217,7 @@ async function scrollToTerm(matchedOn: string): Promise<ScrollToTermResponse> {
 		}
 	}, HIGHLIGHT_DURATION);
 
-	console.log('[Job Parser] Scrolled to term:', matchedOn);
+	console.log('[JDTS] Scrolled to term:', matchedOn);
 	return { success: true };
 }
 
@@ -227,11 +230,11 @@ async function scrollToTerm(matchedOn: string): Promise<ScrollToTermResponse> {
 async function waitForJobContent(timeout = CONTENT_LOAD_TIMEOUT): Promise<boolean> {
 	// Check if content already exists
 	if (hasJobContent()) {
-		console.log('[Job Parser] Job content already loaded');
+		console.log('[JDTS] Job content already loaded');
 		return true;
 	}
 
-	console.log('[Job Parser] Waiting for job content to load...');
+	console.log('[JDTS] Waiting for job content to load...');
 
 	return new Promise((resolve) => {
 		let resolved = false;
@@ -241,7 +244,7 @@ async function waitForJobContent(timeout = CONTENT_LOAD_TIMEOUT): Promise<boolea
 			if (!resolved && hasJobContent()) {
 				resolved = true;
 				observer.disconnect();
-				console.log('[Job Parser] Job content loaded');
+				console.log('[JDTS] Job content loaded');
 				resolve(true);
 			}
 		});
@@ -258,7 +261,7 @@ async function waitForJobContent(timeout = CONTENT_LOAD_TIMEOUT): Promise<boolea
 				resolved = true;
 				observer.disconnect();
 				const found = hasJobContent(); // Final check
-				console.log(`[Job Parser] Wait timeout reached, content found: ${found}`);
+				console.log(`[JDTS] Wait timeout reached, content found: ${found}`);
 				resolve(found);
 			}
 		}, timeout);
@@ -269,7 +272,7 @@ async function waitForJobContent(timeout = CONTENT_LOAD_TIMEOUT): Promise<boolea
  * Handle parse request via bridge
  */
 bridge.on('job.parse', () => {
-	console.log('[Job Parser] Parse requested via bridge');
+	console.log('[JDTS] Parse requested via bridge');
 	return parseCurrentJob();
 });
 
@@ -283,12 +286,12 @@ chrome.runtime.onMessage.addListener(
 		sendResponse: (response: ParseJobResponse['data'] | ScrollToTermResponse) => void,
 	) => {
 		if (message.type === 'PARSE_JOB') {
-			console.log('[Job Parser] Parse requested via runtime message');
+			console.log('[JDTS] Parse requested via runtime message');
 
 			if (!isJobPage()) {
 				sendResponse({
 					job: null,
-					error: 'Not on a LinkedIn job page. Navigate to linkedin.com/jobs/',
+					error: 'Not on a supported job page. Navigate to LinkedIn or Seek.',
 				});
 				return true;
 			}
@@ -319,7 +322,7 @@ chrome.runtime.onMessage.addListener(
 		}
 
 		if (message.type === 'SCROLL_TO_TERM') {
-			console.log('[Job Parser] Scroll to term requested:', message.matchedOn);
+			console.log('[JDTS] Scroll to term requested:', message.matchedOn);
 
 			if (!message.matchedOn) {
 				sendResponse({
@@ -350,18 +353,18 @@ chrome.runtime.onMessage.addListener(
  */
 async function init(): Promise<void> {
 	if (!isJobPage()) {
-		console.log('[Job Parser] Not a job page, waiting for navigation...');
+		console.log('[JDTS] Not a job page, waiting for navigation...');
 		return;
 	}
 
-	console.log('[Job Parser] Content script initialized on job page');
+	console.log('[JDTS] Content script initialized on job page');
 
 	// Connect to background
 	try {
 		await bridge.connectToBackground();
-		console.log('[Job Parser] Connected to background');
+		console.log('[JDTS] Connected to background');
 	} catch (error) {
-		console.error('[Job Parser] Failed to connect to background:', error);
+		console.error('[JDTS] Failed to connect to background:', error);
 	}
 }
 

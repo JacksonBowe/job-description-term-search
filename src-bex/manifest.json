@@ -10,15 +10,20 @@
 
     "permissions": ["storage", "tabs", "sidePanel", "activeTab"],
 
-    "host_permissions": ["*://*.linkedin.com/*"],
+    "host_permissions": ["*://*.linkedin.com/*", "*://*.seek.com.au/*"],
 
     "action": {
-      "default_title": "Open Job Parser"
+      "default_title": "Job Description Term Search"
     },
 
     "content_scripts": [
       {
         "matches": ["*://*.linkedin.com/jobs/*"],
+        "js": ["content-script.ts"],
+        "css": ["assets/content.css"]
+      },
+      {
+        "matches": ["*://*.seek.com.au/*"],
         "js": ["content-script.ts"],
         "css": ["assets/content.css"]
       }
@@ -40,7 +45,7 @@
     },
     "sidebar_action": {
       "default_panel": "www/index.html",
-      "default_title": "Job Parser"
+      "default_title": "Job Description Term Search"
     }
   }
 }

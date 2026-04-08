@@ -508,7 +508,7 @@ function exportToFile(): void {
 
 	const a = document.createElement('a');
 	a.href = url;
-	a.download = 'job-parser-terms.json';
+	a.download = 'jdts-terms.json';
 	document.body.appendChild(a);
 	a.click();
 	document.body.removeChild(a);

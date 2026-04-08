@@ -1,17 +1,18 @@
-# Job Parser BEX - Implementation Roadmap
+# Job Description Term Search (JDTS) - Implementation Roadmap
 
 ## Overview
 
-A Quasar Browser Extension (BEX) that automatically detects LinkedIn and Seek job listing pages, parses job descriptions, scores them against your skill profile, and displays color-coded badges with skill breakdowns inline on the page.
+A Quasar Browser Extension (BEX) that automatically detects LinkedIn and Seek job listing pages, parses job descriptions, scores them against your configured terms, and displays results in a side panel UI.
 
 ### Key Features
 
 - **Automatic detection** of job listing pages on LinkedIn and Seek
-- **Inline score badges** with color-coded tiers (excellent/good/poor/avoid)
-- **Hover breakdown** showing matched/missing skills
-- **Configurable skill categories**: must-haves, nice-to-haves, deal-breakers
-- **Blacklist** with warning indicators and score penalties
-- **Optional full description parsing** (toggle between card preview and full job details)
+- **Side panel UI** showing score and term breakdown for the current job
+- **Configurable term categories**: want, nice-to-have, don't-want
+- **Term weights**: low or high priority for each term
+- **Alias support**: Match multiple variations of a term (e.g., "TypeScript" or "TS")
+- **Scroll-to-term**: Click a matched term to highlight and scroll to it on the page
+- **Import/Export**: Save and load term configurations as JSON
 - **Persistent configuration** stored in `chrome.storage.local`
 
 ---
@@ -20,27 +21,27 @@ A Quasar Browser Extension (BEX) that automatically detects LinkedIn and Seek jo
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│                     Extension Popup (UI)                     │
-│  - Configure skills (must-haves, nice-to-haves)             │
-│  - Configure blacklist/deal-breakers                         │
-│  - View detailed breakdown of current page jobs              │
+│                     Side Panel (UI)                          │
+│  - Configure terms (want, nice-to-have, don't-want)         │
+│  - View score breakdown for current job                      │
+│  - Click terms to scroll to matches on page                  │
 └─────────────────────────────────────────────────────────────┘
                               │
-                    Quasar Bridge (messaging)
+                    chrome.runtime messaging
                               │
 ┌─────────────────────────────────────────────────────────────┐
 │                    Background Script                         │
 │  - Stores config in chrome.storage.local                    │
-│  - Coordinates between popup and content scripts            │
+│  - Opens side panel on extension click                      │
 └─────────────────────────────────────────────────────────────┘
                               │
-                    Quasar Bridge (messaging)
+                    chrome.runtime messaging
                               │
 ┌─────────────────────────────────────────────────────────────┐
 │                Content Scripts (per site)                    │
-│  - linkedin-content.ts: Parse LinkedIn job cards            │
-│  - seek-content.ts: Parse Seek job cards                    │
-│  - Inject score badges + hover breakdown overlay            │
+│  - linkedin.ts: Parse LinkedIn job details                  │
+│  - seek.ts: Parse Seek job drawer                           │
+│  - Handle scroll-to-term highlighting                        │
 └─────────────────────────────────────────────────────────────┘
 ```
 
@@ -49,42 +50,36 @@ A Quasar Browser Extension (BEX) that automatically detects LinkedIn and Seek jo
 ## Data Models
 
 ```typescript
-interface SkillConfig {
-  mustHaves: WeightedSkill[]; // Required skills (high weight)
-  niceToHaves: WeightedSkill[]; // Bonus skills (medium weight)
-  dealBreakers: string[]; // Terms that heavily penalize
-  blacklist: BlacklistItem[]; // Terms to warn/penalize
-}
+type TermType = 'want' | 'nice-to-have' | 'dont-want';
+type TermWeight = 'low' | 'high';
 
-interface WeightedSkill {
-  term: string; // e.g., "TypeScript", "Vue"
-  weight: number; // 1-10 scale
-  aliases?: string[]; // e.g., ["TS"] for TypeScript
-}
-
-interface BlacklistItem {
+interface Term {
+  id: string;
   term: string;
-  behavior: 'warn' | 'penalize'; // Future: could add 'hide'
-  penalty: number; // Score reduction
+  aliases: string[];
+  type: TermType;
+  weight: TermWeight;
 }
 
 interface ParsedJob {
-  id: string; // Unique per platform
   title: string;
   company: string;
   description: string;
   url: string;
-  platform: 'linkedin' | 'seek';
 }
 
-interface ScoredJob extends ParsedJob {
-  score: number; // 0-100
-  matchedMustHaves: string[];
-  missingMustHaves: string[];
-  matchedNiceToHaves: string[];
-  dealBreakerMatches: string[];
-  blacklistMatches: string[];
-  tier: 'excellent' | 'good' | 'poor' | 'avoid';
+interface MatchedTerm {
+  term: Term;
+  matchedOn: string; // The actual text that matched
+  context: string; // Surrounding text snippet
+}
+
+interface ParseResult {
+  job: ParsedJob | null;
+  foundTerms: MatchedTerm[];
+  missingTerms: Term[];
+  score: number | null;
+  error?: string;
 }
 ```
 
@@ -93,30 +88,19 @@ interface ScoredJob extends ParsedJob {
 ## Scoring Algorithm
 
 ```
-Base Score = 100
+Base Score = 100%
 
-1. Must-Haves (60% weight):
-   - Each matched must-have: +points based on weight
-   - Each missing must-have: penalty
-   - Score portion = (matched_weight / total_must_have_weight) * 60
+Bonuses (matched terms):
+  - Want (low weight):      +1
+  - Want (high weight):     +3
+  - Nice-to-have (low):     +1
+  - Nice-to-have (high):    +2
 
-2. Nice-to-Haves (30% weight):
-   - Each matched nice-to-have: +points based on weight
-   - Score portion = (matched_weight / total_nice_to_have_weight) * 30
+Penalties (don't-want matched):
+  - Don't-want (low):       -10
+  - Don't-want (high):      -25
 
-3. Deal-Breakers (-40 each):
-   - Each matched deal-breaker: -40 points
-
-4. Blacklist (configurable penalty):
-   - Each matched blacklist term: -penalty points
-
-Final Score = clamped(0, 100)
-
-Tiers:
-  - Excellent (green): 80-100
-  - Good (yellow): 60-79
-  - Poor (orange): 40-59
-  - Avoid (red): 0-39 or has deal-breaker
+Final Score = Base + Bonuses - Penalties (clamped to 0-200%)
 ```
 
 ---
@@ -126,43 +110,41 @@ Tiers:
 ```
 src/
 ├── components/
-│   ├── skills/
-│   │   ├── SkillInput.vue
-│   │   ├── SkillList.vue
-│   │   └── SkillCategoryTabs.vue
-│   ├── blacklist/
-│   │   ├── BlacklistInput.vue
-│   │   └── BlacklistList.vue
-│   └── jobs/
-│       ├── JobCard.vue
-│       └── JobBreakdown.vue
-├── pages/
-│   ├── SettingsPage.vue        (skills + blacklist config)
-│   └── JobsPage.vue            (current page results)
+│   ├── SettingsPanel.vue     (term management UI)
+│   ├── ResultsPanel.vue      (score and breakdown display)
+│   └── TermListItem.vue      (individual term component)
+├── layouts/
+│   └── SidePanelLayout.vue   (main layout with tabs)
 ├── stores/
-│   ├── skillsStore.ts
-│   └── blacklistStore.ts
+│   └── termsStore.ts         (Pinia store for terms)
 ├── services/
-│   ├── scorer.ts
-│   └── storage.ts              (bridge wrapper for chrome.storage)
+│   ├── matcher.ts            (scoring algorithm)
+│   └── storage.ts            (chrome.storage wrapper)
 └── types/
-    └── index.ts                (all TypeScript interfaces)
+    └── index.ts              (TypeScript interfaces)
 
 src-bex/
-├── background.ts
+├── background.ts             (service worker)
+├── content-script.ts         (main content script entry)
 ├── parsers/
-│   ├── linkedin.ts
-│   ├── seek.ts
-│   └── index.ts                (site detector + router)
-├── injector/
-│   ├── badge.ts                (inject score badges)
-│   └── overlay.ts              (hover breakdown)
-└── content-script.ts           (main entry, replaces my-content-script.ts)
+│   ├── index.ts              (site detector + router)
+│   ├── linkedin.ts           (LinkedIn parser)
+│   └── seek.ts               (Seek parser)
+├── assets/
+│   └── content.css           (scroll-to-term highlight styles)
+└── manifest.json             (Manifest v3)
+
+test/
+├── fixtures/
+│   └── html/                 (saved job page HTML files)
+├── fixtures.json             (URL + expected terms mapping)
+├── matcher.test.ts           (scoring logic tests)
+└── parsers.test.ts           (parser tests with fixtures)
 ```
 
 ---
 
-## Implementation Phases
+## Implementation Status
 
 ### Phase 1: Foundation (Core Types, Storage, Scoring)
 
@@ -170,78 +152,55 @@ src-bex/
 | --- | ----------------------- | ----------------------------------------- | --------- |
 | 1   | Create type definitions | `src/types/index.ts` with all interfaces  | Completed |
 | 2   | Create storage service  | Bridge wrapper for `chrome.storage.local` | Completed |
-| 3   | Create skills store     | Pinia store with persistence              | Completed |
-| 4   | Create blacklist store  | Pinia store with persistence              | Completed |
-| 5   | Create scoring service  | Pure scoring function                     | Completed |
-| 6   | Update manifest         | Restrict to LinkedIn + Seek domains       | Completed |
+| 3   | Create terms store      | Pinia store with persistence              | Completed |
+| 4   | Create scoring service  | Pure scoring function with term matching  | Completed |
+| 5   | Update manifest         | Restrict to LinkedIn + Seek domains       | Completed |
 
 ### Phase 2: Site Parsers (Content Scripts)
 
-| #   | Task                     | Description                        | Status    |
-| --- | ------------------------ | ---------------------------------- | --------- |
-| 7   | Site detector utility    | Detect which site we're on         | Completed |
-| 8   | LinkedIn parser          | Extract job cards from LinkedIn    | Completed |
-| 9   | Seek parser              | Extract job cards from Seek        | Completed |
-| 10  | Full description fetcher | Optional fetch of full job details | Deferred  |
-| 11  | Main content script      | Orchestrate parsing + scoring      | Completed |
+| #   | Task                | Description                   | Status    |
+| --- | ------------------- | ----------------------------- | --------- |
+| 6   | Site detector       | Detect which site we're on    | Completed |
+| 7   | LinkedIn parser     | Extract job details           | Completed |
+| 8   | Seek parser         | Extract job from drawer       | Completed |
+| 9   | Main content script | Handle messages + parsing     | Completed |
+| 10  | Scroll-to-term      | Highlight and scroll to terms | Completed |
 
-### Phase 3: UI Injection (Inline Display)
+### Phase 3: Side Panel UI
 
-| #   | Task           | Description                        | Status    |
-| --- | -------------- | ---------------------------------- | --------- |
-| 12  | Badge injector | Inject score badges onto job cards | Completed |
-| 13  | Hover overlay  | Show skill breakdown on hover      | Completed |
-| 14  | Content CSS    | Styles for injected elements       | Completed |
+| #   | Task             | Description                     | Status    |
+| --- | ---------------- | ------------------------------- | --------- |
+| 11  | Layout + routing | Tab navigation (Results/Terms)  | Completed |
+| 12  | Results panel    | Score display + term breakdown  | Completed |
+| 13  | Settings panel   | Term management + import/export | Completed |
+| 14  | Auto-parse       | Parse on load + tab URL changes | Completed |
 
-### Phase 4: Popup UI (Configuration)
+### Phase 4: Polish & Testing
 
-| #   | Task                  | Description                                     | Status    |
-| --- | --------------------- | ----------------------------------------------- | --------- |
-| 15  | App layout + routing  | Tab navigation for Settings/Jobs                | Completed |
-| 16  | Skills config page    | Manage must-haves, nice-to-haves, deal-breakers | Completed |
-| 17  | Blacklist config page | Manage blacklist with penalties                 | Completed |
-| 18  | Current jobs page     | View scored jobs from active tab                | Completed |
-
-### Phase 5: Integration & Polish
-
-| #   | Task             | Description                              | Status  |
-| --- | ---------------- | ---------------------------------------- | ------- |
-| 19  | Bridge events    | Wire up all communication                | Pending |
-| 20  | MutationObserver | Handle infinite scroll / dynamic loading | Pending |
-| 21  | Error handling   | Graceful failures                        | Pending |
-| 22  | Testing          | Manual testing on both sites             | Pending |
+| #   | Task            | Description                          | Status    |
+| --- | --------------- | ------------------------------------ | --------- |
+| 15  | Unit tests      | Vitest tests for matcher and parsers | Completed |
+| 16  | HTML fixtures   | Test fixtures for parser testing     | Completed |
+| 17  | Documentation   | README, LICENSE                      | Completed |
+| 18  | Build & release | Verify production build              | Completed |
 
 ---
 
 ## Technical Decisions
 
-1. **Manifest v3** - Already configured, required for Chrome Web Store
-2. **Pinia + chrome.storage** - Stores sync to extension storage on change
-3. **CSS injection** - Use `content.css` for badge/overlay styles to avoid CSP issues
-4. **DOM parsing** - Use standard selectors, may need updates if LinkedIn/Seek change their markup
-5. **Performance** - Debounce parsing on scroll, cache parsed jobs by URL
-6. **Restricted permissions** - Content scripts only run on LinkedIn and Seek domains
-
----
-
-## Estimated Effort
-
-| Phase                 | Estimated Time |
-| --------------------- | -------------- |
-| Phase 1: Foundation   | ~2 hours       |
-| Phase 2: Site Parsers | ~3 hours       |
-| Phase 3: UI Injection | ~2 hours       |
-| Phase 4: Popup UI     | ~3 hours       |
-| Phase 5: Integration  | ~2 hours       |
-| **Total**             | **~12 hours**  |
+1. **Manifest v3** - Required for Chrome Web Store
+2. **Side Panel UI** - Uses Chrome's sidePanel API instead of inline injection
+3. **Pinia + chrome.storage** - Terms persist to extension storage on change
+4. **DOM parsing** - Uses stable selectors (data-testid, data-automation) with fallbacks
+5. **Restricted permissions** - Content scripts only run on LinkedIn and Seek domains
+6. **Vitest** - Fast unit testing with happy-dom for DOM testing
 
 ---
 
 ## Future Enhancements
 
-- Export/import config feature
-- Keyboard shortcuts for manual rescan
 - Additional job sites (Indeed, Glassdoor, etc.)
+- Keyboard shortcuts for manual rescan
 - Job application tracking
 - Score history and analytics
 - AI-powered skill extraction from job descriptions

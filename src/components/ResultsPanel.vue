@@ -321,7 +321,7 @@ async function scrollToMatch(match: MatchedTerm): Promise<void> {
 	try {
 		const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
 		if (!tab?.id) {
-			console.error('[Job Parser] No active tab found');
+			console.error('[JDTS] No active tab found');
 			return;
 		}
 
@@ -331,10 +331,10 @@ async function scrollToMatch(match: MatchedTerm): Promise<void> {
 		});
 
 		if (!response.success) {
-			console.warn('[Job Parser] Scroll failed:', response.error);
+			console.warn('[JDTS] Scroll failed:', response.error);
 		}
 	} catch (error) {
-		console.error('[Job Parser] Failed to scroll to term:', error);
+		console.error('[JDTS] Failed to scroll to term:', error);
 	}
 }
 
